@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SynthGen — CTGAN Synthetic Data Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#030712;--s1:#0f172a;--s2:#1e293b;--s3:#334155;--border:#1e293b;
+  --cyan:#06b6d4;--violet:#8b5cf6;--emerald:#10b981;--amber:#f59e0b;--rose:#f43f5e;
+  --text:#e2e8f0;--muted:#64748b;--r:14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+.bg-mesh{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 50% at 8% 12%, rgba(6,182,212,.06) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 60% at 92% 85%, rgba(139,92,246,.07) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, rgba(16,185,129,.03) 0%,transparent 70%);}
+.bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:40px 40px;}
+.wrap{position:relative;z-index:1;max-width:1020px;margin:0 auto;padding:44px 20px 100px;}
+
+/* Header */
+header{text-align:center;margin-bottom:44px;animation:fadeDown .6s ease both;}
+.pill{display:inline-flex;align-items:center;gap:7px;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.25);border-radius:100px;padding:5px 15px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;}
+.pill::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:blink 2s infinite;}
+h1{font-size:clamp(34px,6.5vw,62px);font-weight:700;letter-spacing:-2px;line-height:1.05;margin-bottom:12px;
+   background:linear-gradient(125deg,#fff 0%,var(--cyan) 40%,var(--violet) 100%);
+   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.tagline{color:var(--muted);font-size:15px;font-weight:400;line-height:1.6;max-width:500px;margin:0 auto;}
+
+/* Step bar */
+.stepbar{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:32px;flex-wrap:wrap;}
+.si{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:4px 10px;transition:color .3s;}
+.si.active{color:var(--cyan);}.si.done{color:var(--emerald);}
+.sn{width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;transition:all .3s;}
+.si.done .sn{background:var(--emerald);border-color:var(--emerald);color:#000;}
+.si.active .sn{background:rgba(6,182,212,.15);}
+.sep{color:var(--border);font-size:16px;padding:0 2px;}
+
+/* Card */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;margin-bottom:16px;transition:border-color .3s;}
+.card:hover{border-color:var(--s3);}
+.ct{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:500;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:10px;}
+.ct::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── LANDING: Mode Selection ── */
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:4px;}
+.mode-btn{position:relative;overflow:hidden;background:var(--s2);border:2px solid var(--border);border-radius:var(--r);padding:30px 26px;cursor:pointer;transition:all .25s;text-align:left;display:flex;flex-direction:column;gap:10px;}
+.mode-btn::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .3s;}
+.mode-btn.upload-mode::before{background:radial-gradient(ellipse at 30% 50%,rgba(16,185,129,.1) 0%,transparent 70%);}
+.mode-btn.sector-mode::before{background:radial-gradient(ellipse at 70% 50%,rgba(6,182,212,.1) 0%,transparent 70%);}
+.mode-btn.upload-mode:hover,.mode-btn.upload-mode.sel{border-color:var(--emerald);box-shadow:0 0 0 1px var(--emerald),0 8px 30px rgba(16,185,129,.1);}
+.mode-btn.upload-mode:hover::before,.mode-btn.upload-mode.sel::before{opacity:1;}
+.mode-btn.sector-mode:hover,.mode-btn.sector-mode.sel{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 8px 30px rgba(6,182,212,.1);}
+.mode-btn.sector-mode:hover::before,.mode-btn.sector-mode.sel::before{opacity:1;}
+.mode-icon{font-size:32px;}
+.mode-title{font-weight:700;font-size:20px;letter-spacing:-.4px;}
+.upload-mode .mode-title{color:var(--emerald);}
+.sector-mode .mode-title{color:var(--cyan);}
+.mode-desc{font-size:12.5px;color:var(--muted);line-height:1.6;}
+.mode-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
+.mode-tag{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.8px;padding:2px 8px;border-radius:100px;text-transform:uppercase;}
+.upload-mode .mode-tag{background:rgba(16,185,129,.08);color:var(--emerald);border:1px solid rgba(16,185,129,.2);}
+.sector-mode .mode-tag{background:rgba(6,182,212,.08);color:var(--cyan);border:1px solid rgba(6,182,212,.2);}
+.mode-chk{position:absolute;top:12px;right:14px;width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;transition:opacity .2s;}
+.upload-mode.sel .mode-chk{opacity:1;background:var(--emerald);color:#000;}
+.sector-mode.sel .mode-chk{opacity:1;background:var(--cyan);color:#000;}
+
+/* ── SECTOR Selection ── */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.sb{position:relative;overflow:hidden;background:var(--s2);border:1.5px solid var(--border);border-radius:var(--r);padding:26px 22px;cursor:pointer;transition:all .25s;text-align:left;display:flex;flex-direction:column;gap:9px;}
+.sb::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .3s;}
+.sb.health::before{background:radial-gradient(ellipse at 30% 50%,rgba(6,182,212,.1) 0%,transparent 70%);}
+.sb.finance::before{background:radial-gradient(ellipse at 70% 50%,rgba(139,92,246,.1) 0%,transparent 70%);}
+.sb:hover::before,.sb.sel::before{opacity:1;}
+.sb.health:hover,.sb.health.sel{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan),0 8px 30px rgba(6,182,212,.1);}
+.sb.finance:hover,.sb.finance.sel{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet),0 8px 30px rgba(139,92,246,.1);}
+.sicon{font-size:28px;}.sname{font-weight:700;font-size:18px;letter-spacing:-.4px;}
+.sb.health .sname{color:var(--cyan);}.sb.finance .sname{color:var(--violet);}
+.sdesc{font-size:12.5px;color:var(--muted);line-height:1.55;}
+.stags{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px;}
+.stag{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.8px;padding:2px 8px;border-radius:100px;text-transform:uppercase;}
+.health .stag{background:rgba(6,182,212,.08);color:var(--cyan);border:1px solid rgba(6,182,212,.2);}
+.finance .stag{background:rgba(139,92,246,.08);color:var(--violet);border:1px solid rgba(139,92,246,.2);}
+.schk{position:absolute;top:12px;right:13px;width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;transition:opacity .2s;}
+.sb.health.sel .schk{opacity:1;background:var(--cyan);color:#000;}
+.sb.finance.sel .schk{opacity:1;background:var(--violet);color:#000;}
+
+/* ── DATASET Grid ── */
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+.dc{background:var(--s2);border:1.5px solid var(--border);border-radius:12px;padding:16px 14px;cursor:pointer;transition:all .22s;position:relative;}
+.dc.hd:hover,.dc.hd.sel{border-color:var(--cyan);background:rgba(6,182,212,.04);}
+.dc.fd:hover,.dc.fd.sel{border-color:var(--violet);background:rgba(139,92,246,.04);}
+.dicon{font-size:17px;margin-bottom:6px;}
+.dname{font-weight:700;font-size:12.5px;margin-bottom:3px;line-height:1.3;}
+.ddesc{font-size:11px;color:var(--muted);line-height:1.45;}
+.dsource{font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.8px;text-transform:uppercase;margin-top:7px;padding:2px 7px;border-radius:4px;display:inline-block;}
+.hd .dsource{background:rgba(6,182,212,.07);color:var(--cyan);}
+.fd .dsource{background:rgba(139,92,246,.07);color:var(--violet);}
+.drows{position:absolute;top:9px;right:9px;font-family:'JetBrains Mono',monospace;font-size:7.5px;color:var(--muted);}
+.dchk{position:absolute;top:8px;right:8px;width:15px;height:15px;border-radius:50%;font-size:8px;display:none;align-items:center;justify-content:center;}
+.dc.sel .drows{display:none;}.dc.sel .dchk{display:flex;}
+.hd.sel .dchk{background:var(--cyan);color:#000;}
+.fd.sel .dchk{background:var(--violet);color:#000;}
+
+/* ── Upload Zone ── */
+.upload-zone{border:2px dashed rgba(16,185,129,.3);border-radius:var(--r);padding:40px 20px;text-align:center;cursor:pointer;transition:all .25s;background:rgba(16,185,129,.02);margin-bottom:18px;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--emerald);background:rgba(16,185,129,.06);}
+.upload-zone input[type=file]{display:none;}
+.up-icon{font-size:44px;margin-bottom:12px;}
+.up-title{font-weight:700;font-size:16px;color:var(--emerald);margin-bottom:6px;}
+.up-desc{font-size:12.5px;color:var(--muted);}
+.up-file-name{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--emerald);margin-top:10px;padding:5px 12px;border-radius:6px;background:rgba(16,185,129,.08);display:inline-block;}
+
+/* ── Form ── */
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:20px;}
+label{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);}
+select{background:var(--s2);border:1.5px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12.5px;border-radius:10px;padding:12px 15px;outline:none;transition:border-color .2s;width:100%;appearance:none;}
+select:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(6,182,212,.1);}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--border);border-radius:4px;outline:none;cursor:pointer;margin-top:6px;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:19px;height:19px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px rgba(6,182,212,.5);cursor:pointer;transition:transform .2s;}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
+.sval{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:500;color:var(--cyan);letter-spacing:-1.5px;}
+.slabels{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:7px;}
+.fmtg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.fb{background:var(--s2);border:1.5px solid var(--border);border-radius:10px;padding:13px 8px;cursor:pointer;transition:all .2s;text-align:center;display:flex;flex-direction:column;align-items:center;gap:5px;}
+.fb:hover{border-color:var(--cyan);}.fb.sel{border-color:var(--cyan);background:rgba(6,182,212,.07);box-shadow:0 0 0 1px var(--cyan);}
+.ficon{font-size:19px;}.fname{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;}.fdesc{font-size:9.5px;color:var(--muted);}
+
+/* Toggle checkbox */
+.toggle-row{display:flex;align-items:center;gap:12px;background:var(--s2);border:1.5px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:20px;}
+.toggle-label{font-size:13px;font-weight:500;flex:1;}
+.toggle-sub{font-size:11px;color:var(--muted);}
+.tswitch{position:relative;width:42px;height:24px;flex-shrink:0;}
+.tswitch input{opacity:0;width:0;height:0;}
+.tslider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:100px;transition:.3s;}
+.tslider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;}
+.tswitch input:checked+.tslider{background:var(--violet);}
+.tswitch input:checked+.tslider:before{transform:translateX(18px);}
+
+/* Buttons */
+.genbtn{width:100%;padding:16px;background:linear-gradient(135deg,rgba(6,182,212,.12) 0%,rgba(139,92,246,.12) 100%);border:1.5px solid var(--cyan);border-radius:var(--r);color:var(--cyan);font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;letter-spacing:.5px;cursor:pointer;transition:all .25s;position:relative;overflow:hidden;}
+.genbtn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--cyan),var(--violet));opacity:0;transition:opacity .25s;}
+.genbtn:hover::before{opacity:.1;}
+.genbtn:hover{box-shadow:0 0 30px rgba(6,182,212,.2),0 8px 24px rgba(0,0,0,.3);transform:translateY(-1px);}
+.genbtn span{position:relative;z-index:1;}
+.backbtn{background:none;border:1px solid var(--border);border-radius:10px;padding:10px 18px;color:var(--muted);font-size:12.5px;cursor:pointer;transition:all .2s;}
+.backbtn:hover{border-color:var(--violet);color:var(--violet);}
+.contbtn{background:var(--s2);border:1.5px solid var(--border);border-radius:10px;padding:10px 24px;color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;}
+.contbtn:hover{border-color:var(--cyan);color:var(--cyan);}
+
+/* Section visibility */
+.sec{display:none;animation:fadeUp .5s ease both;}
+.sec.vis{display:block;}
+
+/* Progress */
+#prog-section{display:none;animation:fadeUp .5s ease both;}
+.prog-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:30px 34px;margin-bottom:16px;}
+.prog-title{font-weight:700;font-size:16px;margin-bottom:22px;display:flex;align-items:center;gap:12px;}
+.spinner{width:19px;height:19px;border:2px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
+.psteps{display:flex;flex-direction:column;gap:9px;}
+.ps{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:var(--s2);border:1px solid var(--border);font-size:12.5px;color:var(--muted);transition:all .3s;}
+.ps.active{color:var(--text);border-color:var(--cyan);background:rgba(6,182,212,.04);}
+.ps.done{color:var(--emerald);border-color:rgba(16,185,129,.25);}
+.picon{font-size:14px;width:19px;text-align:center;flex-shrink:0;}
+.pbar-wrap{margin-top:20px;background:var(--s2);border-radius:100px;height:5px;overflow:hidden;}
+.pbar{height:100%;width:0;border-radius:100px;background:linear-gradient(90deg,var(--cyan),var(--violet));transition:width .5s ease;box-shadow:0 0 10px rgba(6,182,212,.4);}
+.ppct{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-align:right;margin-top:5px;}
+
+/* Result */
+#res-section{display:none;animation:fadeUp .5s ease both;}
+.res-card{background:var(--s1);border:1px solid rgba(16,185,129,.22);border-radius:var(--r);padding:28px 32px;margin-bottom:16px;box-shadow:0 0 40px rgba(16,185,129,.04);}
+.res-hdr{display:flex;align-items:center;gap:14px;margin-bottom:22px;}
+.res-icon{width:44px;height:44px;border-radius:50%;background:rgba(16,185,129,.1);border:2px solid rgba(16,185,129,.3);display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;}
+.res-title{font-weight:700;font-size:20px;}
+.res-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.hsgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:20px;}
+.hs{background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px 12px;text-align:center;}
+.hsv{font-family:'JetBrains Mono',monospace;font-size:21px;font-weight:500;letter-spacing:-1px;}
+.hsl{font-size:10px;color:var(--muted);margin-top:3px;}
+.hs.sim .hsv{color:var(--emerald);}.hs.inf .hsv{color:var(--cyan);}.hs.wrn .hsv{color:var(--amber);}
+.src-box{background:var(--s2);border:1px solid var(--border);border-left:3px solid var(--cyan);border-radius:0 10px 10px 0;padding:12px 16px;margin-bottom:20px;font-size:12px;color:var(--muted);line-height:1.7;}
+.src-box strong{color:var(--cyan);}
+
+/* Similarity gauges */
+.gauges{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:18px;}
+.gbox{background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:16px;}
+.glbl{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:9px;}
+.gbw{background:var(--border);border-radius:100px;height:7px;margin-bottom:7px;overflow:hidden;}
+.gb{height:100%;border-radius:100px;transition:width 1.1s ease;}
+.gb.ov{background:linear-gradient(90deg,var(--violet),var(--cyan));box-shadow:0 0 10px rgba(6,182,212,.4);}
+.gb.ks{background:linear-gradient(90deg,#22d3ee,#a5f3fc);}
+.gb.mn{background:linear-gradient(90deg,var(--violet),#c4b5fd);}
+.gscore{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;}
+.gscore.ov{color:var(--cyan);}.gscore.ks{color:#22d3ee;}.gscore.mn{color:var(--violet);}
+.ginterp{font-size:10.5px;color:var(--muted);margin-top:2px;}
+
+/* ML Comparison */
+.ml-card{background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:16px;}
+.ml-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px;}
+.ml-stat{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}
+.ml-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;letter-spacing:-1px;}
+.ml-lbl{font-size:10px;color:var(--muted);margin-top:3px;}
+.ml-acc-bar{display:flex;gap:14px;margin-bottom:16px;}
+.ml-acc-item{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.ml-acc-label{font-size:11px;color:var(--muted);margin-bottom:8px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1px;}
+.ml-acc-val{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;margin-bottom:8px;}
+.ml-acc-val.real{color:var(--cyan);}.ml-acc-val.syn{color:var(--violet);}
+.ml-bar-bg{background:var(--border);border-radius:100px;height:6px;overflow:hidden;}
+.ml-bar-fill{height:100%;border-radius:100px;transition:width 1.2s ease;}
+.ml-bar-fill.real{background:linear-gradient(90deg,var(--cyan),#67e8f9);}
+.ml-bar-fill.syn{background:linear-gradient(90deg,var(--violet),#c4b5fd);}
+.fi-list{display:flex;flex-direction:column;gap:8px;}
+.fi-row{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px 14px;}
+.fi-top{display:flex;justify-content:space-between;margin-bottom:6px;}
+.fi-name{font-family:'JetBrains Mono',monospace;font-size:11px;}
+.fi-pct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--amber);}
+.fi-bg{background:var(--border);border-radius:100px;height:3px;overflow:hidden;}
+.fi-fill{height:100%;background:linear-gradient(90deg,var(--amber),#fcd34d);border-radius:100px;transition:width 1.2s ease;}
+
+/* Tabs */
+.tabs{display:flex;gap:3px;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;}
+.tb{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;padding:9px 14px;background:none;border:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:all .2s;}
+.tb:hover{color:var(--text);}.tb.active{color:var(--cyan);border-bottom-color:var(--cyan);}
+.tp{display:none;}.tp.active{display:block;animation:fadeUp .35s ease both;}
+
+/* Section headers */
+.sh{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:9px;}
+.sh::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* Table */
+.tw{background:var(--s2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;}
+.thd{padding:9px 13px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;}
+.tsc{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:rgba(255,255,255,.02);font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:9px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border);}
+td{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text);padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.03);white-space:nowrap;}
+tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(255,255,255,.015);}
+.tg{color:var(--emerald)!important;}.tw2{color:var(--amber)!important;}.tb2{color:var(--rose)!important;}
+
+/* Column sim bars */
+.cslist{display:flex;flex-direction:column;gap:8px;}
+.csr{background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:11px 14px;}
+.csh{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
+.csname{font-family:'JetBrains Mono',monospace;font-size:10.5px;}
+.cspct{font-family:'JetBrains Mono',monospace;font-size:10.5px;}
+.cbg{background:var(--border);border-radius:100px;height:4px;}
+.cb{height:100%;border-radius:100px;transition:width 1.2s ease;}
+
+/* Charts */
+.cg2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+.cg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;}
+.cbox{background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:14px;}
+.clbl{font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.cwrap{position:relative;height:155px;}.cwrap.tall{height:210px;}.cwrap.corr{height:260px;}
+
+/* Legend */
+.lgnd{display:flex;gap:14px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);margin-bottom:12px;flex-wrap:wrap;}
+.ld{display:flex;align-items:center;gap:5px;}
+.ldot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+
+/* Download button */
+.dlbtn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:15px;background:linear-gradient(135deg,rgba(16,185,129,.09) 0%,rgba(6,182,212,.09) 100%);border:1.5px solid var(--emerald);border-radius:var(--r);color:var(--emerald);font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .25s;text-decoration:none;}
+.dlbtn:hover{box-shadow:0 0 28px rgba(16,185,129,.15);transform:translateY(-2px);}
+.rstbtn{display:block;text-align:center;margin-top:9px;background:none;border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--muted);font-size:12px;cursor:pointer;transition:all .2s;width:100%;}
+.rstbtn:hover{border-color:var(--violet);color:var(--violet);}
+
+footer{text-align:center;margin-top:56px;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);letter-spacing:.5px;line-height:2;}
+footer a{color:var(--cyan);text-decoration:none;}
+
+@keyframes fadeDown{from{opacity:0;transform:translateY(-18px)}to{opacity:1;transform:none}}
+@keyframes fadeUp  {from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none}}
+@keyframes blink   {0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes spin    {to{transform:rotate(360deg)}}
+
+@media(max-width:640px){
+  .card,.res-card{padding:18px 14px;}
+  .mode-grid,.sg,.dg,.fmtg,.hsgrid,.gauges,.cg2,.cg3,.ml-grid,.ml-acc-bar{grid-template-columns:1fr;}
+  .ml-acc-bar{flex-direction:column;}
+}
+</style>
+</head>
+<body>
+<div class="bg-mesh"></div>
+<div class="bg-grid"></div>
+<div class="wrap">
+
+<!-- HEADER -->
+<header>
+  <div class="pill">CTGAN · 20 Verified Datasets · ML Comparison · Custom Upload</div>
+  <h1>SynthGen</h1>
+  <p class="tagline">Privacy-preserving synthetic tabular data using Conditional GANs — upload your own dataset or choose from verified Finance &amp; Healthcare sources.</p>
+</header>
+
+<!-- STEP BAR -->
+<div class="stepbar" id="stepbar">
+  <div class="si active" id="stp1"><div class="sn">1</div>Mode</div><div class="sep">›</div>
+  <div class="si" id="stp2"><div class="sn">2</div>Source</div><div class="sep">›</div>
+  <div class="si" id="stp3"><div class="sn">3</div>Configure</div><div class="sep">›</div>
+  <div class="si" id="stp4"><div class="sn">4</div>Generate</div><div class="sep">›</div>
+  <div class="si" id="stp5"><div class="sn">5</div>Analytics</div>
+</div>
+
+<!-- STEP 1: MODE SELECTION -->
+<div class="card sec vis" id="step1">
+  <div class="ct">01 · How do you want to provide data?</div>
+  <div class="mode-grid">
+    <button class="mode-btn upload-mode" onclick="pickMode('upload')">
+      <div class="mode-chk">✓</div>
+      <div class="mode-icon">📤</div>
+      <div class="mode-title">Upload My Dataset</div>
+      <div class="mode-desc">Provide your own CSV or Excel file. CTGAN will learn from it and generate high-quality synthetic copies.</div>
+      <div class="mode-tags">
+        <span class="mode-tag">CSV</span>
+        <span class="mode-tag">Excel</span>
+        <span class="mode-tag">Any Domain</span>
+        <span class="mode-tag">Custom</span>
+      </div>
+    </button>
+    <button class="mode-btn sector-mode" onclick="pickMode('sector')">
+      <div class="mode-chk">✓</div>
+      <div class="mode-icon">🗄️</div>
+      <div class="mode-title">Choose from Dataset Library</div>
+      <div class="mode-desc">Select from 20 verified datasets across Finance and Healthcare sectors — all sourced from UCI ML Repository.</div>
+      <div class="mode-tags">
+        <span class="mode-tag">10 Finance</span>
+        <span class="mode-tag">10 Healthcare</span>
+        <span class="mode-tag">UCI ML Repo</span>
+      </div>
+    </button>
+  </div>
+</div>
+
+<!-- STEP 2A: UPLOAD DATASET -->
+<div class="card sec" id="step2-upload">
+  <div class="ct">02 · Upload Your Dataset</div>
+  <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+       ondragover="ev.preventDefault();this.classList.add('drag')"
+       ondragleave="this.classList.remove('drag')"
+       ondrop="handleDrop(event)">
+    <input type="file" id="file-input" accept=".csv,.xlsx,.xls" onchange="handleFile(this)"/>
+    <div class="up-icon">📂</div>
+    <div class="up-title">Drop your file here or click to browse</div>
+    <div class="up-desc">Supports CSV and Excel (.xlsx / .xls) · Max 50 MB</div>
+    <div class="up-file-name" id="up-fname" style="display:none"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <button class="backbtn" onclick="goBack(1)">← Back</button>
+    <button class="contbtn" onclick="toStep3('upload')">Continue →</button>
+  </div>
+</div>
+
+<!-- STEP 2B: SECTOR SELECTION -->
+<div class="card sec" id="step2-sector">
+  <div class="ct">02 · Choose a Sector</div>
+  <div class="sg">
+    <button class="sb health" onclick="pickSector('health')">
+      <div class="schk">✓</div>
+      <div class="sicon">🏥</div>
+      <div class="sname">Healthcare</div>
+      <div class="sdesc">10 verified clinical &amp; medical datasets from NIDDK, WHO, UCI and leading research hospitals.</div>
+      <div class="stags"><span class="stag">PIMA Diabetes</span><span class="stag">Heart Disease</span><span class="stag">Parkinson's</span><span class="stag">+7 more</span></div>
+    </button>
+    <button class="sb finance" onclick="pickSector('finance')">
+      <div class="schk">✓</div>
+      <div class="sicon">💳</div>
+      <div class="sname">Finance</div>
+      <div class="sdesc">10 verified financial risk, loan, and credit datasets from leading academic &amp; banking institutions.</div>
+      <div class="stags"><span class="stag">German Credit</span><span class="stag">Bank Marketing</span><span class="stag">Banknote Auth</span><span class="stag">+7 more</span></div>
+    </button>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;">
+    <button class="backbtn" onclick="goBack(1)">← Back</button>
+  </div>
+</div>
+
+<!-- STEP 2C: DATASET SELECTION -->
+<div class="card sec" id="step2-dataset">
+  <div class="ct">02 · Select Dataset <span id="sector-label" style="color:var(--muted);text-transform:lowercase;letter-spacing:0"></span></div>
+  <div class="dg" id="dg"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;">
+    <button class="backbtn" onclick="goBack('sector')">← Back</button>
+    <button class="contbtn" onclick="toStep3('sector')">Continue →</button>
+  </div>
+</div>
+
+<!-- STEP 3: CONFIGURE -->
+<div class="card sec" id="step3">
+  <div class="ct">03 · Configure Generation</div>
+  <div class="field">
+    <label>Synthetic Samples to Generate</label>
+    <div class="sval" id="sv">500</div>
+    <input type="range" min="100" max="10000" step="100" value="500" id="sl"
+           oninput="document.getElementById('sv').textContent=parseInt(this.value).toLocaleString()"/>
+    <div class="slabels"><span>100</span><span>2,500</span><span>5,000</span><span>7,500</span><span>10,000</span></div>
+  </div>
+  <div class="field">
+    <label>CTGAN Training Epochs</label>
+    <select id="ep">
+      <option value="100">100 epochs — Fast training (lower accuracy)</option>
+      <option value="200" selected>200 epochs — Balanced (recommended)</option>
+      <option value="300">300 epochs — High quality (slower)</option>
+      <option value="500">500 epochs — Maximum quality (slowest)</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Output File Format</label>
+    <div class="fmtg">
+      <div class="fb sel" onclick="pickFmt(this,'csv')"><div class="ficon">📄</div><div class="fname">CSV</div><div class="fdesc">Comma separated</div></div>
+      <div class="fb" onclick="pickFmt(this,'json')"><div class="ficon">🗂️</div><div class="fname">JSON</div><div class="fdesc">Structured</div></div>
+      <div class="fb" onclick="pickFmt(this,'excel')"><div class="ficon">📊</div><div class="fname">Excel</div><div class="fdesc">.xlsx format</div></div>
+    </div>
+  </div>
+  <!-- ML comparison toggle -->
+  <div class="toggle-row">
+    <div>
+      <div class="toggle-label">🤖 Train ML Model &amp; Compare</div>
+      <div class="toggle-sub">Train a Random Forest on real vs synthetic data and compare accuracy on a held-out test set</div>
+    </div>
+    <label class="tswitch">
+      <input type="checkbox" id="ml-toggle" checked/>
+      <span class="tslider"></span>
+    </label>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:4px;">
+    <button class="backbtn" id="step3-back" onclick="goBackStep3()">← Back</button>
+    <button class="genbtn" onclick="doGenerate()"><span>⚡ Run CTGAN &amp; Generate Analytics</span></button>
+  </div>
+</div>
+
+<!-- STEP 4: PROGRESS -->
+<div id="prog-section">
+  <div class="prog-card">
+    <div class="prog-title"><div class="spinner" id="spin"></div><span id="ptxt">Initialising...</span></div>
+    <div class="psteps" id="psteps"></div>
+    <div class="pbar-wrap"><div class="pbar" id="pbar"></div></div>
+    <div class="ppct" id="ppct">0%</div>
+  </div>
+</div>
+
+<!-- STEP 5: RESULT -->
+<!-- Error Section -->
+<div id="err-section" style="display:none;animation:fadeUp .5s ease both;">
+  <div class="card" style="border-color:var(--rose);background:rgba(244,63,94,0.04);">
+    <div style="display:flex;align-items:flex-start;gap:16px;">
+      <div style="font-size:32px;flex-shrink:0;">⚠️</div>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:17px;color:var(--rose);margin-bottom:8px;">Generation Failed</div>
+        <div id="err-msg" style="font-size:13px;color:var(--muted);line-height:1.6;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-family:'JetBrains Mono',monospace;word-break:break-all;margin-bottom:16px;"></div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;">
+          <strong style="color:var(--text);">Common causes:</strong><br>
+          • File has too few rows or columns<br>
+          • All columns are identical or have no variance<br>
+          • Unsupported data types or encoding issues<br>
+          • Server-side training error (try fewer epochs or a smaller sample)
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="contbtn" onclick="goBackStep3()">← Back to Settings</button>
+          <button class="backbtn" onclick="resetAll()">Start Over</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="res-section">
+  <!-- Download + hero -->
+  <div class="res-card">
+    <div class="res-hdr">
+      <div class="res-icon">✅</div>
+      <div><div class="res-title">Synthetic Data Generated!</div><div class="res-sub" id="rsub"></div></div>
+    </div>
+    <div class="hsgrid">
+      <div class="hs sim"><div class="hsv" id="hs1">—</div><div class="hsl">Overall Similarity</div></div>
+      <div class="hs inf"><div class="hsv" id="hs2">—</div><div class="hsl">Rows Generated</div></div>
+      <div class="hs inf"><div class="hsv" id="hs3">—</div><div class="hsl">Features</div></div>
+      <div class="hs wrn"><div class="hsv" id="hs4">—</div><div class="hsl">Real Rows (train)</div></div>
+    </div>
+    <div class="src-box" id="srcbox"></div>
+    <a class="dlbtn" id="dlbtn" href="#" download>⬇ Download Synthetic Dataset</a>
+    <button class="rstbtn" onclick="resetAll()">↺ Generate Another Dataset</button>
+  </div>
+
+  <!-- ANALYTICS CARD -->
+  <div class="card">
+    <div class="ct">Analytics Dashboard · Real vs Synthetic Comparison</div>
+
+    <!-- Similarity Gauges -->
+    <div class="sh">Similarity Scores</div>
+    <div class="gauges" id="gauges"></div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tb active" onclick="tab('t-rvp')">Real vs Synthetic</button>
+      <button class="tb" onclick="tab('t-ml')">ML Comparison</button>
+      <button class="tb" onclick="tab('t-col')">Column Stats</button>
+      <button class="tb" onclick="tab('t-dist')">Distributions</button>
+      <button class="tb" onclick="tab('t-cat')">Categorical</button>
+      <button class="tb" onclick="tab('t-corr')">Correlation</button>
+      <button class="tb" onclick="tab('t-prev')">Data Preview</button>
+    </div>
+
+    <!-- TAB: Real vs Synthetic -->
+    <div class="tp active" id="t-rvp">
+      <div class="sh">Sorted Value Comparison — Real vs Synthetic</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Each chart below shows sorted real values (cyan) overlaid with sorted synthetic values (violet). Closer overlap = better distribution learning.</p>
+      <div class="lgnd">
+        <div class="ld"><div class="ldot" style="background:rgba(6,182,212,.8)"></div>Real Data</div>
+        <div class="ld"><div class="ldot" style="background:rgba(139,92,246,.8)"></div>Synthetic Data</div>
+      </div>
+      <div class="cg2" id="rvp-charts"></div>
+      <div class="sh" style="margin-top:18px;">Mean Value Comparison — Real vs Synthetic</div>
+      <div class="cbox"><div class="clbl">Column Means: Real (cyan) vs Synthetic (violet)</div><div class="cwrap tall"><canvas id="mean-cmp-chart"></canvas></div></div>
+      <div class="sh" style="margin-top:16px;">Per-Column KS Similarity</div>
+      <div class="cbox"><div class="clbl">Higher = more identical distribution (KS Similarity %)</div><div class="cwrap tall"><canvas id="ks-bar-chart"></canvas></div></div>
+    </div>
+
+    <!-- TAB: ML Comparison -->
+    <div class="tp" id="t-ml">
+      <div id="ml-content">
+        <p style="font-size:12px;color:var(--muted);padding:20px;text-align:center;">Enable ML Comparison in Step 3 to see results here.</p>
+      </div>
+    </div>
+
+    <!-- TAB: Column Stats -->
+    <div class="tp" id="t-col">
+      <div class="sh">Per-Column KS Similarity</div>
+      <div class="cslist" id="cslist"></div>
+      <div class="sh" style="margin-top:18px;">Detailed Column Comparison Table</div>
+      <div class="tw">
+        <div class="thd"><span>Real vs Synthetic — Numerical Columns</span><span id="ccnt"></span></div>
+        <div class="tsc"><table id="ctbl"></table></div>
+      </div>
+    </div>
+
+    <!-- TAB: Distributions -->
+    <div class="tp" id="t-dist">
+      <div class="lgnd">
+        <div class="ld"><div class="ldot" style="background:rgba(6,182,212,.7)"></div>Real Data</div>
+        <div class="ld"><div class="ldot" style="background:rgba(139,92,246,.7)"></div>Synthetic Data</div>
+      </div>
+      <div class="cg3" id="distc"></div>
+    </div>
+
+    <!-- TAB: Categorical -->
+    <div class="tp" id="t-cat">
+      <div class="lgnd">
+        <div class="ld"><div class="ldot" style="background:rgba(6,182,212,.7)"></div>Real</div>
+        <div class="ld"><div class="ldot" style="background:rgba(139,92,246,.7)"></div>Synthetic</div>
+      </div>
+      <div class="cg2" id="catc"></div>
+    </div>
+
+    <!-- TAB: Correlation -->
+    <div class="tp" id="t-corr">
+      <div class="sh">Correlation Structure Comparison</div>
+      <div class="cg2">
+        <div class="cbox"><div class="clbl">Real Data Correlation Matrix</div><div class="cwrap corr"><canvas id="corr-r"></canvas></div></div>
+        <div class="cbox"><div class="clbl">Synthetic Data Correlation Matrix</div><div class="cwrap corr"><canvas id="corr-s"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- TAB: Data Preview -->
+    <div class="tp" id="t-prev">
+      <div class="sh">Real Data — Descriptive Statistics</div>
+      <div class="tw" style="margin-bottom:18px;"><div class="tsc"><table id="rdesc"></table></div></div>
+      <div class="sh">Synthetic Data — Descriptive Statistics</div>
+      <div class="tw" style="margin-bottom:18px;"><div class="tsc"><table id="sdesc"></table></div></div>
+      <div class="sh">Generated Data — Sample Rows (first 5)</div>
+      <div class="tw">
+        <div class="thd"><span>Synthetic dataset preview</span><span id="pcols"></span></div>
+        <div class="tsc"><table id="prevtbl"></table></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Built with <strong>CTGAN</strong> · Flask · Chart.js · scikit-learn<br/>
+  Datasets: <a href="https://archive.ics.uci.edu/" target="_blank">UCI ML Repository</a> · Kaggle · OpenML<br/>
+  Academic &amp; Research use only · SynthGen v4.0
+</footer>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+const S = {
+  mode: null,        // 'upload' | 'sector'
+  sector: null,      // 'health' | 'finance'
+  dsId: null,
+  fmt: 'csv',
+  samples: 500,
+  epochs: 200,
+  file: null,        // File object for custom upload
+  step3Back: null,   // Where back goes from step3
+};
+const CI = {};
+
+// ══════════════════════════════════════════════════════════════
+//  DATASET REGISTRY (UI mirror of backend)
+// ══════════════════════════════════════════════════════════════
+const DS = {
+  health: [
+    { id:'pima_diabetes',     icon:'🩺', name:'PIMA Indians Diabetes',           desc:'768 survey records from NIDDK — diabetes risk from glucose, BMI, insulin levels.', source:'UCI #34 · NIDDK (US Govt.)',          rows:'768 rows · 9 cols', cls:'hd' },
+    { id:'heart_disease',     icon:'❤️', name:'Heart Disease (Cleveland)',         desc:'303 patient records from Cleveland Clinic — classic cardiac risk classification.', source:'UCI #45 · Cleveland Clinic',            rows:'303 rows · 14 cols', cls:'hd' },
+    { id:'breast_cancer',     icon:'🔬', name:'Breast Cancer Wisconsin',           desc:'699 fine needle aspirate cell features — malignant vs benign classification.',     source:'UCI #15 · Univ. Wisconsin',             rows:'699 rows · 11 cols', cls:'hd' },
+    { id:'hepatitis',         icon:'🏥', name:'Hepatitis Dataset',                 desc:'155 hepatitis patient records with 19 clinical features — survival prediction.',   source:'UCI #46 · UCI Repository',              rows:'155 rows · 20 cols', cls:'hd' },
+    { id:'thyroid',           icon:'🧬', name:'Thyroid Disease (Small)',            desc:'215 patient thyroid function records — hyper/hypo/normal classification.',        source:'UCI #102 · J. R. Quinlan',              rows:'215 rows · 6 cols',  cls:'hd' },
+    { id:'parkinsons',        icon:'🧠', name:"Parkinson's Disease",               desc:"197 biomedical voice recordings — distinguish Parkinson's disease from healthy.", source:'UCI #174 · Univ. Oxford',               rows:'197 rows · 24 cols', cls:'hd' },
+    { id:'chronic_kidney',    icon:'💊', name:'Chronic Kidney Disease',            desc:'400 patient records from Apollo Hospitals — kidney disease detection.',           source:'UCI #336 · Apollo Hospitals, India',    rows:'400 rows · 25 cols', cls:'hd' },
+    { id:'stroke',            icon:'🫀', name:'Stroke Prediction',                 desc:'5,110 patient records — lifestyle and health risk factors for stroke prediction.', source:'Kaggle · McKinsey Healthcare',          rows:'5,110 rows · 12 cols',cls:'hd' },
+    { id:'heart_failure',     icon:'💉', name:'Heart Failure Clinical Records',    desc:'299 clinical records from Faisalabad Institute of Cardiology.',                  source:'UCI #519 · Faisalabad Institute',        rows:'299 rows · 13 cols', cls:'hd' },
+    { id:'diabetes_hospital', icon:'🩻', name:'Diabetes 130-US Hospitals',         desc:'101,766 hospital records (sampled) — HbA1c, medications, readmission rates.',   source:'UCI #296 · Virginia Commonwealth Univ.',rows:'101K rows · 14 cols',cls:'hd' },
+  ],
+  finance: [
+    { id:'german_credit',     icon:'🏦', name:'German Credit Dataset',             desc:'1,000 loan applicants from Universität Hamburg — good/bad credit risk.',         source:'UCI #144 · Prof. Hofmann, Hamburg',      rows:'1,000 rows · 21 cols',cls:'fd' },
+    { id:'bank_marketing',    icon:'📞', name:'Bank Marketing (Small)',             desc:'45,211 direct marketing records from Portuguese bank — deposit subscription.',   source:'UCI #222 · Portuguese Banking',          rows:'45,211 rows · 17 cols',cls:'fd' },
+    { id:'default_credit',    icon:'💳', name:'Default of Credit Card Clients',    desc:'30,000 credit card clients — predict payment default from 6-month history.',    source:'UCI #350 · Chung Hua Univ., Taiwan',    rows:'30,000 rows · 24 cols',cls:'fd' },
+    { id:'australian_credit', icon:'🌏', name:'Australian Credit Approval',        desc:'690 credit applications — confidential Australian banking institution data.',    source:'UCI #143 · Quinlan, 1987',               rows:'690 rows · 15 cols', cls:'fd' },
+    { id:'statlog_credit',    icon:'📋', name:'Statlog (Credit Approval)',          desc:'German credit data in Statlog format — same verified 1,000-row dataset.',       source:'UCI #144 · StatLib CMU',                 rows:'1,000 rows · 21 cols',cls:'fd' },
+    { id:'personal_loan',     icon:'💰', name:'Personal Loan Dataset',             desc:'5,000 Thera Bank customers — liability customer conversion to asset customer.',  source:'Kaggle · Thera Bank / INSAID',           rows:'5,000 rows · 14 cols',cls:'fd' },
+    { id:'banknote',          icon:'💵', name:'Banknote Authentication',            desc:'1,372 wavelet-transformed banknote images — genuine vs forged classification.',  source:'UCI #267 · Ostwestfalen-Lippe Univ.',    rows:'1,372 rows · 5 cols', cls:'fd' },
+    { id:'financial_distress',icon:'📉', name:'Financial Distress Dataset',         desc:'3,672 company-year observations — predict financial distress from 83 features.', source:'Kaggle · Mamdouh Refaat',                rows:'3,672 rows · 86 cols',cls:'fd' },
+    { id:'credit_approval',   icon:'✅', name:'Credit Approval Dataset',            desc:'690 anonymised credit card applications — classic binary classification.',      source:'UCI #27 · Quinlan, 1987',                rows:'690 rows · 16 cols', cls:'fd' },
+    { id:'insurance',         icon:'🛡️', name:'Lending Club Loan (Insurance)',      desc:'1,338 US insurance records — predict annual charges from demographics.',       source:'OpenML #41214 · Brett Lantz',            rows:'1,338 rows · 7 cols', cls:'fd' },
+  ]
+};
+
+// ══════════════════════════════════════════════════════════════
+//  NAVIGATION HELPERS
+// ══════════════════════════════════════════════════════════════
+function setStep(n) {
+  for(let i=1;i<=5;i++) {
+    const e = document.getElementById('stp'+i);
+    e.classList.remove('active','done');
+    if(i<n) e.classList.add('done');
+    if(i===n) e.classList.add('active');
+  }
+}
+function showSec(id) {
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('vis'));
+  if(id) {
+    var el = document.getElementById(id);
+    if(el) el.classList.add('vis');
+  }
+}
+function goBack(n) {
+  if(n===1) { showSec('step1'); setStep(1); }
+  else if(n==='sector') { showSec('step2-sector'); setStep(2); }
+}
+function goBackStep3() {
+  if(S.mode==='upload') { showSec('step2-upload'); setStep(2); }
+  else { showSec('step2-dataset'); setStep(2); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STEP 1: MODE
+// ══════════════════════════════════════════════════════════════
+function pickMode(mode) {
+  S.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('sel'));
+  document.querySelector('.mode-btn.'+(mode==='upload'?'upload':'sector')+'-mode').classList.add('sel');
+  setTimeout(() => {
+    if(mode === 'upload') { showSec('step2-upload'); setStep(2); }
+    else { showSec('step2-sector'); setStep(2); }
+  }, 160);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STEP 2A: UPLOAD
+// ══════════════════════════════════════════════════════════════
+function handleFile(inp) {
+  const file = inp.files[0];
+  if(!file) return;
+  S.file = file;
+  const el = document.getElementById('up-fname');
+  el.textContent = `📄 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  el.style.display = 'inline-block';
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if(!file) return;
+  S.file = file;
+  const el = document.getElementById('up-fname');
+  el.textContent = `📄 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  el.style.display = 'inline-block';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STEP 2B: SECTOR
+// ══════════════════════════════════════════════════════════════
+function pickSector(s) {
+  S.sector = s; S.dsId = null;
+  document.querySelectorAll('.sb').forEach(b=>b.classList.remove('sel'));
+  document.querySelector('.sb.'+s).classList.add('sel');
+  const cls = s==='health'?'hd':'fd';
+  document.getElementById('sector-label').textContent = '— '+s.charAt(0).toUpperCase()+s.slice(1);
+  document.getElementById('dg').innerHTML = DS[s].map(d=>`
+    <div class="dc ${cls}" onclick="pickDs('${d.id}',this)">
+      <div class="drows">${d.rows}</div><div class="dchk">✓</div>
+      <div class="dicon">${d.icon}</div>
+      <div class="dname">${d.name}</div>
+      <div class="ddesc">${d.desc}</div>
+      <span class="dsource">📂 ${d.source}</span>
+    </div>`).join('');
+  setTimeout(()=>{ showSec('step2-dataset'); setStep(2); }, 160);
+}
+function pickDs(id, el) {
+  document.querySelectorAll('.dc').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel'); S.dsId = id;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STEP 3: CONFIGURE
+// ══════════════════════════════════════════════════════════════
+function toStep3(from) {
+  if(from === 'upload') {
+    if(!S.file) { alert('Please select a file to upload.'); return; }
+  } else {
+    if(!S.dsId) { alert('Please select a dataset.'); return; }
+  }
+  showSec('step3'); setStep(3);
+}
+function pickFmt(el, f) {
+  document.querySelectorAll('.fb').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel'); S.fmt = f;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STEP 4: GENERATE
+// ══════════════════════════════════════════════════════════════
+const PSTEPS = [
+  {icon:'📥', txt:'Loading dataset from source...'},
+  {icon:'🧹', txt:'Preprocessing — encoding, cleaning, handling nulls...'},
+  {icon:'🧠', txt:'Initialising CTGAN Generator & Discriminator...'},
+  {icon:'⚡', txt:'Adversarial training in progress...'},
+  {icon:'🎲', txt:'Sampling synthetic records from trained model...'},
+  {icon:'📊', txt:'Computing KS-tests, correlation & similarity metrics...'},
+  {icon:'🤖', txt:'Training ML model — comparing real vs synthetic accuracy...'},
+  {icon:'💾', txt:'Serialising output file and building analytics...'},
+];
+const wait = ms => new Promise(r=>setTimeout(r,ms));
+
+async function doGenerate() {
+  S.samples = parseInt(document.getElementById('sl').value);
+  S.epochs  = parseInt(document.getElementById('ep').value);
+  const runML = document.getElementById('ml-toggle').checked;
+
+  showSec(null);
+  document.getElementById('prog-section').style.display = 'block';
+  document.getElementById('res-section').style.display = 'none';
+  document.getElementById('err-section').style.display = 'none';
+  setStep(4);
+
+  const steps = runML ? PSTEPS : PSTEPS.filter((_,i)=>i!==6);
+  document.getElementById('psteps').innerHTML =
+    steps.map((p,i)=>`<div class="ps" id="ps${i}"><div class="picon">${p.icon}</div><span>${p.txt}</span></div>`).join('');
+
+  const bar = document.getElementById('pbar'), pct = document.getElementById('ppct');
+
+  // ── Start API call IMMEDIATELY (in parallel with animation) ──────────────
+  let apiPromise;
+  if(S.mode === 'upload' && S.file) {
+    const fd = new FormData();
+    fd.append('file', S.file);
+    fd.append('samples', S.samples);
+    fd.append('epochs', S.epochs);
+    fd.append('format', S.fmt);
+    fd.append('run_ml', runML ? 'true' : 'false');
+    apiPromise = fetch('/generate-custom', {method:'POST', body:fd});
+  } else {
+    apiPromise = fetch('/generate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({dataset_id:S.dsId, samples:S.samples, epochs:S.epochs, format:S.fmt, run_ml:runML})
+    });
+  }
+
+  // ── Animate progress steps while API is working ───────────────────────────
+  const delays = [0,700,1400,2200,3900,5300,6600,7800];
+  for(let i=0;i<steps.length;i++) {
+    if(i>0) await wait(delays[Math.min(i, delays.length-1)] - delays[Math.min(i-1, delays.length-1)]);
+    if(i>0 && document.getElementById('ps'+(i-1)))
+      document.getElementById('ps'+(i-1)).className='ps done';
+    if(document.getElementById('ps'+i))
+      document.getElementById('ps'+i).className='ps active';
+    // Cap at 90% — last 10% when API actually returns
+    bar.style.width  = Math.round(((i+1)/steps.length)*90)+'%';
+    pct.textContent  = Math.round(((i+1)/steps.length)*90)+'%';
+  }
+
+  // Last step stays spinning while we wait for the API response
+  const lastStep = document.getElementById('ps'+(steps.length-1));
+  if(lastStep) lastStep.className='ps active';
+  pct.textContent = 'Waiting for server…';
+
+  // ── Now await the API response ────────────────────────────────────────────
+  try {
+    const res = await apiPromise;
+
+    // Complete progress bar
+    bar.style.width = '100%';
+    pct.textContent = '100%';
+    steps.forEach((_,i)=>{
+      const el = document.getElementById('ps'+i);
+      if(el) el.className='ps done';
+    });
+
+    if(!res.ok) {
+      let errMsg = `Server error ${res.status}`;
+      try { const errBody = await res.json(); errMsg = errBody.error || errMsg; } catch(_){}
+      showErrorSection(errMsg);
+      return;
+    }
+
+    const data = await res.json();
+    if(data.error) { showErrorSection(data.error); return; }
+
+    await wait(300);
+    renderResult(data);
+
+  } catch(e) {
+    // Network-level error: backend probably not running → demo mode
+    if(e instanceof TypeError) {
+      console.warn('Backend unreachable, using demo mode:', e.message);
+      bar.style.width='100%'; pct.textContent='100%';
+      await wait(300);
+      renderDemo(runML);
+    } else {
+      showErrorSection(e.message || 'Unknown error during generation.');
+    }
+  }
+}
+
+function showErrorSection(msg) {
+  document.getElementById('prog-section').style.display='none';
+  const errSec = document.getElementById('err-section');
+  errSec.style.display='block';
+  document.getElementById('err-msg').textContent = msg;
+  setStep(4);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER RESULT (real backend)
+// ══════════════════════════════════════════════════════════════
+function renderResult(data) {
+  document.getElementById('prog-section').style.display='none';
+  document.getElementById('err-section').style.display='none';
+  document.getElementById('res-section').style.display='block';
+  setStep(5);
+
+  const dsName = data.dataset_name || 'Custom Dataset';
+  const numCols = data.numerical_columns || [];
+  const catCols = data.categorical_columns || [];
+
+  document.getElementById('rsub').textContent =
+    `${dsName} · ${(data.rows_generated||0).toLocaleString()} synthetic rows · ${S.fmt.toUpperCase()}`;
+  document.getElementById('hs1').textContent = (data.quality_score||0)+'%';
+  document.getElementById('hs2').textContent = (data.rows_generated||0).toLocaleString();
+  document.getElementById('hs3').textContent = data.columns||0;
+  var realRows = data.real_rows || 'N/A';
+  document.getElementById('hs4').textContent = (typeof realRows === 'number') ? realRows.toLocaleString() : realRows;
+
+  document.getElementById('srcbox').innerHTML =
+    `<strong>Dataset:</strong> ${dsName}<br>
+     <strong>Numerical columns (${numCols.length}):</strong> ${numCols.slice(0,8).join(', ')+(numCols.length>8?' …':'')}
+     &nbsp;|&nbsp; <strong>Categorical (${catCols.length}):</strong> ${catCols.slice(0,6).join(', ')+(catCols.length>6?' …':'') || '—'}<br>
+     <strong>Source:</strong> ${data.source||'User Upload'} &nbsp;|&nbsp;
+     <strong>Agency:</strong> ${data.agency||'User-provided'}<br>
+     <strong>Citation:</strong> ${data.citation||'N/A'}`;
+
+  // Download button — uses real file_id from backend
+  const btn = document.getElementById('dlbtn');
+  btn.href     = `/download/${data.file_id}`;
+  btn.onclick  = null;  // clear any demo handler
+  btn.download = `synthetic_${S.dsId||'custom'}_${data.rows_generated}.${S.fmt}`;
+  btn.textContent = `⬇ Download synthetic_data.${S.fmt} (${(data.rows_generated||0).toLocaleString()} rows · ${data.columns} cols)`;
+
+  const st = data.stats;
+  if(!st) return;
+
+  renderGauges(st);
+
+  if(st.real_vs_syn && Object.keys(st.real_vs_syn).length > 0 && st.column_stats && st.column_stats.length > 0)
+    renderRvP(st.real_vs_syn, st.column_stats);
+
+  if(st.column_stats && st.column_stats.length > 0) {
+    renderColBars(st.column_stats);
+    renderColTable(st.column_stats);
+  }
+
+  if(st.distributions && Object.keys(st.distributions).length > 0)
+    renderDist(st.distributions);
+  else
+    document.getElementById('distc').innerHTML =
+      '<p style="color:var(--muted);font-size:12px;padding:20px;">No numerical distributions to display.</p>';
+
+  renderCat(st.cat_comparison||{});
+  renderCorr(st.correlation_real, st.correlation_syn);
+  renderDesc(st.real_summary||{}, st.syn_summary||{});
+
+  if(data.preview && data.preview.columns && data.preview.rows)
+    buildPreview(data.preview.columns, data.preview.rows);
+
+  renderMLComparison(data.ml_comparison);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DEMO MODE  (only shown when backend is completely unreachable)
+// ══════════════════════════════════════════════════════════════
+function renderDemo(runML=true) {
+  document.getElementById('prog-section').style.display='none';
+  document.getElementById('err-section').style.display='none';
+  document.getElementById('res-section').style.display='block';
+  setStep(5);
+
+  let ds = null;
+  if(S.sector && S.dsId) ds = DS[S.sector] && DS[S.sector].find(function(d){return d.id===S.dsId;});
+
+  // Try to infer columns from uploaded file headers if available
+  let numCols, catCols;
+  if(S.mode==='upload' && S.file) {
+    // We can't read the file synchronously in demo mode; use generic names
+    numCols = ['feature_1','feature_2','feature_3','feature_4','feature_5','feature_6','feature_7','feature_8'];
+    catCols = ['category_1','category_2'];
+  } else {
+    numCols = ds ? ['age','income','score','duration','amount','rate','balance','credit'].slice(0,6)
+                : ['age','income','score','duration','amount','rate','balance','credit'];
+    catCols = ['class','status'];
+  }
+
+  const sim=+(88+Math.random()*7).toFixed(1);
+  const ks=+(85+Math.random()*8).toFixed(1);
+  const mn=+(87+Math.random()*7).toFixed(1);
+
+  var dsName2 = (ds && ds.name) || (S.file && S.file.name) || 'Dataset';
+  var dsSource = (ds && ds.source) || 'User Upload';
+  document.getElementById('rsub').textContent = '\u26a0 DEMO MODE \u00b7 ' + dsName2 + ' \u00b7 ' + S.samples.toLocaleString() + ' rows';
+  document.getElementById('hs1').textContent = sim+'%';
+  document.getElementById('hs2').textContent = S.samples.toLocaleString();
+  document.getElementById('hs3').textContent = numCols.length+catCols.length;
+  document.getElementById('hs4').textContent = '~1,000+';
+  document.getElementById('srcbox').innerHTML =
+    '<strong>\u26a0 DEMO MODE</strong> \u2014 The backend server is not running or unreachable.<br>' +
+    '<strong>To get real CTGAN output:</strong> run <code>python backend.py</code> then refresh.<br>' +
+    '<strong>Dataset:</strong> ' + dsName2 + ' &nbsp;|&nbsp; <strong>Source:</strong> ' + dsSource;
+
+  const btn = document.getElementById('dlbtn');
+  const allDemoCols = [...numCols, ...catCols];
+  btn.href='#';
+  btn.onclick=e=>{e.preventDefault();demoDl(allDemoCols);};
+  btn.textContent=`⬇ Download Demo CSV (random data — run backend for real output)`;
+
+  const dColStats = numCols.map(col=>{
+    const rm=20+Math.random()*80, sm=rm+(Math.random()-.5)*8;
+    const ks2=+(78+Math.random()*18).toFixed(1);
+    return {column:col,real_mean:+rm.toFixed(2),syn_mean:+sm.toFixed(2),
+      real_std:+(10+Math.random()*15).toFixed(2),syn_std:+(10+Math.random()*15).toFixed(2),
+      real_min:+(rm-20).toFixed(2),syn_min:+(sm-20).toFixed(2),
+      real_max:+(rm+20).toFixed(2),syn_max:+(sm+20).toFixed(2),
+      real_median:+rm.toFixed(2),syn_median:+sm.toFixed(2),
+      mean_diff_pct:+((Math.abs(rm-sm)/rm)*100).toFixed(2),ks_similarity:ks2,
+      ks_p_value:+(Math.random()*.5).toFixed(4)};
+  });
+
+  const dRvS={};
+  numCols.slice(0,4).forEach(col=>{
+    const n=100;
+    const r=Array.from({length:n},(_,i)=>+(i*0.8+Math.random()*5).toFixed(2)).sort((a,b)=>a-b);
+    const s=r.map(v=>+(v+(Math.random()-.5)*3).toFixed(2));
+    dRvS[col]={real:r,synthetic:s,labels:Array.from({length:n},(_,i)=>i)};
+  });
+  const dDist={};
+  numCols.slice(0,6).forEach(col=>{
+    const labels=Array.from({length:15},(_,i)=>(i*5).toFixed(1));
+    const rc=labels.map(()=>Math.floor(15+Math.random()*85));
+    dDist[col]={labels,real_counts:rc,syn_counts:rc.map(v=>Math.floor(v*(0.82+Math.random()*.36)))};
+  });
+  const dCat={};
+  catCols.forEach(col=>{
+    dCat[col]={categories:['0','1'],
+      real_pct:[+(55+Math.random()*20).toFixed(1),+(25+Math.random()*20).toFixed(1)],
+      syn_pct:[+(55+Math.random()*20).toFixed(1),+(25+Math.random()*20).toFixed(1)]};
+  });
+  const dCorr=cols=>({columns:cols,values:cols.map(()=>cols.map(()=>+(Math.random()*2-1).toFixed(3)))});
+  const dDesc={};
+  numCols.forEach(col=>{const m=20+Math.random()*60;
+    dDesc[col]={count:S.samples,mean:+m.toFixed(3),std:+(5+Math.random()*15).toFixed(3),
+      min:+(m-20).toFixed(3),'25%':+(m-8).toFixed(3),'50%':+m.toFixed(3),
+      '75%':+(m+8).toFixed(3),max:+(m+20).toFixed(3)};});
+
+  const dSt={overall_similarity:sim,ks_score:ks,mean_diff_score:mn,
+    column_stats:dColStats,real_vs_syn:dRvS,distributions:dDist,cat_comparison:dCat,
+    correlation_real:dCorr(numCols.slice(0,5)),correlation_syn:dCorr(numCols.slice(0,5)),
+    real_summary:dDesc,syn_summary:dDesc};
+
+  renderGauges(dSt);renderRvP(dSt.real_vs_syn,dSt.column_stats);
+  renderColBars(dColStats);renderColTable(dColStats);
+  renderDist(dDist);renderCat(dCat);
+  renderCorr(dSt.correlation_real,dSt.correlation_syn);
+  renderDesc(dDesc,dDesc);
+  buildPreview([...numCols,...catCols],
+    Array.from({length:5},()=>[...numCols.map(()=>+(Math.random()*100).toFixed(2)),...catCols.map(()=>String(Math.floor(Math.random()*2)))]));
+
+  if(runML) {
+    renderMLComparison({
+      target_column:'class',n_classes:2,
+      real_accuracy:+(82+Math.random()*10).toFixed(2),
+      syn_accuracy:+(75+Math.random()*12).toFixed(2),
+      accuracy_gap:+(5+Math.random()*8).toFixed(2),
+      fidelity_score:+(88+Math.random()*8).toFixed(1),
+      feature_importance:numCols.slice(0,8).map((f,i)=>({feature:f,importance:+((30-i*3+Math.random()*10)).toFixed(2)})),
+      test_size:200,train_size_real:800,train_size_syn:S.samples,
+      model:'Random Forest (50 trees)',
+    });
+  } else { renderMLComparison(null); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: GAUGES
+// ══════════════════════════════════════════════════════════════
+function renderGauges(st) {
+  const itp=v=>v>=90?'Excellent match':v>=80?'Very good':v>=70?'Good match':v>=60?'Moderate':'Low similarity';
+  document.getElementById('gauges').innerHTML=`
+    <div class="gbox"><div class="glbl">Overall Similarity Score</div><div class="gbw"><div class="gb ov" id="g1" style="width:0%"></div></div><div class="gscore ov">${st.overall_similarity}%</div><div class="ginterp">${itp(st.overall_similarity)}</div></div>
+    <div class="gbox"><div class="glbl">KS-Test Distribution Match</div><div class="gbw"><div class="gb ks" id="g2" style="width:0%"></div></div><div class="gscore ks">${st.ks_score}%</div><div class="ginterp">Kolmogorov-Smirnov shape similarity</div></div>
+    <div class="gbox"><div class="glbl">Mean Preservation Score</div><div class="gbw"><div class="gb mn" id="g3" style="width:0%"></div></div><div class="gscore mn">${st.mean_diff_score}%</div><div class="ginterp">Column mean accuracy</div></div>`;
+  setTimeout(()=>{
+    document.getElementById('g1').style.width=st.overall_similarity+'%';
+    document.getElementById('g2').style.width=st.ks_score+'%';
+    document.getElementById('g3').style.width=st.mean_diff_score+'%';
+  },120);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: ML COMPARISON
+// ══════════════════════════════════════════════════════════════
+function renderMLComparison(ml) {
+  const el = document.getElementById('ml-content');
+  if(!ml || ml.error) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">' +
+      ((ml && ml.error) ? '\u26a0\ufe0f '+ml.error : '\ud83e\udd16 ML Comparison was not enabled. Enable it in Step 3 and regenerate.') +
+      '</div>';
+    return;
+  }
+  const gapColor = ml.accuracy_gap<=5?'var(--emerald)':ml.accuracy_gap<=10?'var(--amber)':'var(--rose)';
+  el.innerHTML = `
+    <div class="sh">Random Forest — Real vs Synthetic Training Accuracy</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6;">
+      A Random Forest classifier (${ml.model}) was trained separately on real data and on synthetic data. 
+      Both models were evaluated on the same held-out <strong style="color:var(--text)">${ml.test_size} real test rows</strong>. 
+      Target column: <strong style="color:var(--cyan)">${ml.target_column}</strong> · Classes: ${ml.n_classes}
+    </p>
+    <div class="ml-acc-bar">
+      <div class="ml-acc-item">
+        <div class="ml-acc-label">🔵 Trained on Real Data</div>
+        <div class="ml-acc-val real">${ml.real_accuracy}%</div>
+        <div class="ml-bar-bg"><div class="ml-bar-fill real" style="width:0%" data-w="${ml.real_accuracy}"></div></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Training set: ${ml.train_size_real} real rows</div>
+      </div>
+      <div class="ml-acc-item">
+        <div class="ml-acc-label">🟣 Trained on Synthetic Data</div>
+        <div class="ml-acc-val syn">${ml.syn_accuracy}%</div>
+        <div class="ml-bar-bg"><div class="ml-bar-fill syn" style="width:0%" data-w="${ml.syn_accuracy}"></div></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Training set: ${ml.train_size_syn} synthetic rows</div>
+      </div>
+    </div>
+    <div class="ml-grid">
+      <div class="ml-stat"><div class="ml-val" style="color:var(--cyan)">${ml.real_accuracy}%</div><div class="ml-lbl">Real Data Accuracy</div></div>
+      <div class="ml-stat"><div class="ml-val" style="color:var(--violet)">${ml.syn_accuracy}%</div><div class="ml-lbl">Synthetic Data Accuracy</div></div>
+      <div class="ml-stat"><div class="ml-val" style="color:${gapColor}">${ml.accuracy_gap}%</div><div class="ml-lbl">Accuracy Gap</div></div>
+      <div class="ml-stat"><div class="ml-val" style="color:var(--emerald)">${ml.fidelity_score}%</div><div class="ml-lbl">Synthetic Fidelity</div></div>
+    </div>
+    <div class="sh">Feature Importance (Real Data Model)</div>
+    <div class="fi-list">
+      ${ml.feature_importance.map(f=>`
+        <div class="fi-row">
+          <div class="fi-top"><span class="fi-name">${f.feature}</span><span class="fi-pct">${f.importance.toFixed(2)}%</span></div>
+          <div class="fi-bg"><div class="fi-fill" style="width:0%" data-w="${f.importance}"></div></div>
+        </div>`).join('')}
+    </div>`;
+
+  // Animate bars
+  setTimeout(()=>{
+    el.querySelectorAll('[data-w]').forEach(b=>b.style.width=Math.min(b.dataset.w,100)+'%');
+  },200);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER: RVP CHARTS
+// ══════════════════════════════════════════════════════════════
+function renderRvP(rvs, colStats) {
+  const c = document.getElementById('rvp-charts');
+  c.innerHTML='';
+  Object.entries(rvs).forEach(([col,d],i)=>{
+    const id='rvp'+i;
+    c.innerHTML+=`<div class="cbox"><div class="clbl">${col} — Sorted Values</div><div class="cwrap tall"><canvas id="${id}"></canvas></div></div>`;
+    setTimeout(()=>{
+      if(CI[id]) CI[id].destroy();
+      CI[id]=new Chart(document.getElementById(id),{type:'line',data:{labels:d.labels,datasets:[
+        {label:'Real',data:d.real,borderColor:'rgba(6,182,212,0.85)',backgroundColor:'rgba(6,182,212,0.08)',borderWidth:2,pointRadius:0,fill:true,tension:.3},
+        {label:'Synthetic',data:d.synthetic,borderColor:'rgba(139,92,246,0.85)',backgroundColor:'rgba(139,92,246,0.08)',borderWidth:2,pointRadius:0,fill:true,tension:.3,borderDash:[4,3]}
+      ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{labels:{color:'#64748b',font:{size:9}}}},
+        scales:{x:{display:false,grid:{display:false}},y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'rgba(255,255,255,.04)'}}}}});
+    },200+i*60);
+  });
+
+  const meanCols=colStats.map(c=>c.column);
+  const realMeans=colStats.map(c=>c.real_mean);
+  const synMeans=colStats.map(c=>c.syn_mean);
+  setTimeout(()=>{
+    if(CI['mean']) CI['mean'].destroy();
+    CI['mean']=new Chart(document.getElementById('mean-cmp-chart'),{type:'bar',data:{labels:meanCols,datasets:[
+      {label:'Real Mean',data:realMeans,backgroundColor:'rgba(6,182,212,0.6)',borderColor:'rgba(6,182,212,0.9)',borderWidth:1,borderRadius:4},
+      {label:'Synthetic Mean',data:synMeans,backgroundColor:'rgba(139,92,246,0.6)',borderColor:'rgba(139,92,246,0.9)',borderWidth:1,borderRadius:4}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#64748b',font:{size:10}}}},
+      scales:{x:{ticks:{color:'#64748b',font:{size:9},maxRotation:40},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'rgba(255,255,255,.04)'}}}
+    }});
+  },300);
+
+  setTimeout(()=>{
+    if(CI['ks']) CI['ks'].destroy();
+    const ksCols=colStats.map(c=>c.column);
+    const ksVals=colStats.map(c=>c.ks_similarity);
+    const colors=ksVals.map(v=>v>=85?'rgba(16,185,129,0.7)':v>=70?'rgba(245,158,11,0.7)':'rgba(244,63,94,0.7)');
+    CI['ks']=new Chart(document.getElementById('ks-bar-chart'),{type:'bar',data:{labels:ksCols,datasets:[{label:'KS Similarity %',data:ksVals,backgroundColor:colors,borderRadius:5}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{min:0,max:100,ticks:{color:'#64748b',font:{size:9},callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#64748b',font:{size:9}},grid:{display:false}}}}});
+  },350);
+}
+
+function renderColBars(cs) {
+  document.getElementById('cslist').innerHTML=cs.map(c=>{
+    const v=c.ks_similarity;
+    const col=v>=85?'#10b981':v>=70?'#f59e0b':'#f43f5e';
+    return `<div class="csr"><div class="csh"><span class="csname">${c.column}</span><span class="cspct" style="color:${col}">${v}%</span></div><div class="cbg"><div class="cb" style="width:0%;background:${col}" data-w="${v}"></div></div></div>`;
+  }).join('');
+  setTimeout(()=>document.querySelectorAll('.cb').forEach(b=>b.style.width=b.dataset.w+'%'),120);
+}
+
+function renderColTable(cs) {
+  document.getElementById('ccnt').textContent=cs.length+' columns';
+  document.getElementById('ctbl').innerHTML=
+    `<thead><tr><th>Column</th><th>Real Mean</th><th>Syn Mean</th><th>Real Std</th><th>Syn Std</th><th>Real Min</th><th>Syn Min</th><th>Real Max</th><th>Syn Max</th><th>Mean Diff%</th><th>KS Similarity</th></tr></thead>
+     <tbody>${cs.map(c=>{
+       const dc=c.mean_diff_pct<5?'tg':c.mean_diff_pct<15?'tw2':'tb2';
+       const kc=c.ks_similarity>=85?'tg':c.ks_similarity>=70?'tw2':'tb2';
+       return `<tr><td>${c.column}</td><td>${c.real_mean}</td><td>${c.syn_mean}</td><td>${c.real_std}</td><td>${c.syn_std}</td><td>${c.real_min}</td><td>${c.syn_min}</td><td>${c.real_max}</td><td>${c.syn_max}</td><td class="${dc}">${c.mean_diff_pct}%</td><td class="${kc}">${c.ks_similarity}%</td></tr>`;
+     }).join('')}</tbody>`;
+}
+
+function renderDist(dist) {
+  const el=document.getElementById('distc');el.innerHTML='';
+  Object.entries(dist).forEach(([col,d],i)=>{
+    const id='dc'+i;
+    el.innerHTML+=`<div class="cbox"><div class="clbl">${col}</div><div class="cwrap"><canvas id="${id}"></canvas></div></div>`;
+    setTimeout(()=>{
+      if(CI[id]) CI[id].destroy();
+      CI[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels:d.labels,datasets:[
+        {label:'Real',data:d.real_counts,backgroundColor:'rgba(6,182,212,0.55)',borderColor:'rgba(6,182,212,0.9)',borderWidth:1,borderRadius:2},
+        {label:'Synthetic',data:d.syn_counts,backgroundColor:'rgba(139,92,246,0.55)',borderColor:'rgba(139,92,246,0.9)',borderWidth:1,borderRadius:2}
+      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{ticks:{color:'#64748b',font:{size:8},maxRotation:45},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#64748b',font:{size:8}},grid:{color:'rgba(255,255,255,.04)'}}}}});
+    },200+i*50);
+  });
+}
+
+function renderCat(cat) {
+  const el=document.getElementById('catc');
+  if(!cat||!Object.keys(cat).length){el.innerHTML='<p style="color:var(--muted);font-size:12px;padding:20px;">No categorical columns in this dataset view.</p>';return;}
+  el.innerHTML='';
+  Object.entries(cat).forEach(([col,d],i)=>{
+    const id='cc'+i;
+    el.innerHTML+=`<div class="cbox"><div class="clbl">${col}</div><div class="cwrap"><canvas id="${id}"></canvas></div></div>`;
+    setTimeout(()=>{
+      if(CI[id]) CI[id].destroy();
+      CI[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels:d.categories,datasets:[
+        {label:'Real %',data:d.real_pct,backgroundColor:'rgba(6,182,212,0.6)',borderRadius:4},
+        {label:'Synthetic %',data:d.syn_pct,backgroundColor:'rgba(139,92,246,0.6)',borderRadius:4}
+      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#64748b',font:{size:9}}}},
+        scales:{x:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#64748b',font:{size:9},callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.04)'},max:100}}}});
+    },200+i*80);
+  });
+}
+
+function renderCorr(cr,cs) {
+  ['r','s'].forEach(w=>{
+    const corr=w==='r'?cr:cs;
+    if(!corr || !corr.columns || !corr.columns.length) return;
+    const id='corr-'+w;
+    if(CI[id]) CI[id].destroy();
+    const cols=corr.columns;
+    setTimeout(()=>{
+      CI[id]=new Chart(document.getElementById(id),{type:'scatter',
+        data:{datasets:cols.flatMap(function(row,ri){return cols.map(function(col,ci){return {data:[{x:ci,y:ri}],backgroundColor:corrCol((corr.values[ri]||[])[ci]),pointRadius:16,pointHoverRadius:18,label:''};});})},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){var r=Math.round(ctx.parsed.y),c=Math.round(ctx.parsed.x);var val=(corr.values[r]||[])[c];return cols[r]+'\u00d7'+cols[c]+': '+(val!==undefined?val:'');  }}}},
+          scales:{x:{min:-.5,max:cols.length-.5,ticks:{callback:function(i){return cols[Math.round(i)]||'';},color:'#64748b',font:{size:8}},grid:{display:false}},y:{min:-.5,max:cols.length-.5,ticks:{callback:function(i){return cols[Math.round(i)]||'';},color:'#64748b',font:{size:8}},grid:{display:false},reverse:true}}}
+      });
+    },300);
+  });
+}
+function corrCol(v){if(v==null) return 'rgba(100,100,100,.3)';const a=Math.abs(v);return v>0?`rgba(6,182,212,${.08+a*.8})`:`rgba(244,63,94,${.08+a*.8})`;}
+
+function renderDesc(rd,sd) {
+  ['r','s'].forEach(w=>{
+    const d=w==='r'?rd:sd;
+    const tbl=document.getElementById(w==='r'?'rdesc':'sdesc');
+    if(!d||!Object.keys(d).length){tbl.innerHTML='<tr><td>No data</td></tr>';return;}
+    const cols=Object.keys(d),stats=Object.keys((d[cols[0]])||{});
+    tbl.innerHTML='<thead><tr><th>Stat</th>'+cols.map(function(c){return '<th>'+c+'</th>';}).join('')+'</tr></thead><tbody>'+stats.map(function(st){return '<tr><td style="color:var(--muted)">'+st+'</td>'+cols.map(function(c){var v=(d[c]&&d[c][st]!==undefined)?d[c][st]:'—';return '<td>'+v+'</td>';}).join('')+'</tr>';}).join('')+'</tbody>';
+  });
+}
+
+function buildPreview(cols,rows) {
+  document.getElementById('pcols').textContent=cols.length+' cols';
+  document.getElementById('prevtbl').innerHTML=
+    `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
+}
+
+function demoDl(cols) {
+  // cols: array of column names
+  const rows = Array.from({length: S.samples}, () =>
+    cols.map(c => +(Math.random()*100).toFixed(2))
+  );
+  const csv = cols.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = `synthetic_demo_${S.samples}.csv`;
+  a.click();
+}
+
+function tab(id) {
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tp').forEach(p=>p.classList.remove('active'));
+  document.querySelector(`.tb[onclick="tab('${id}')"]`).classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+
+function resetAll() {
+  Object.assign(S,{mode:null,sector:null,dsId:null,fmt:'csv',file:null});
+  document.getElementById('res-section').style.display='none';
+  document.getElementById('prog-section').style.display='none';
+  document.getElementById('err-section').style.display='none';
+  Object.values(CI).forEach(function(c){if(c && c.destroy) c.destroy();});
+  document.querySelectorAll('.mode-btn,.sb').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('up-fname').style.display='none';
+  document.getElementById('file-input').value='';
+  document.getElementById('sl').value=500;
+  document.getElementById('sv').textContent='500';
+  document.querySelectorAll('.tb').forEach((b,i)=>b.classList.toggle('active',i===0));
+  document.querySelectorAll('.tp').forEach((p,i)=>p.classList.toggle('active',i===0));
+  showSec('step1');setStep(1);
+}
+</script>
+</body>
+</html>
